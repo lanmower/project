@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function hasRole(role) {
+      return role in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles;
+    }
+    
+    match /attachments/{emailId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('superuser');
+    }
+  }
+}
