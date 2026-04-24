@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isUserDoc() {
+      return request.auth.uid == resource.data.uid;
+    }
+    
+    function hasRole(role) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data.role == role;
+    }
+    
+    function canAccessEmail(emailDoc) {
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.data.role in ['superuser', 'admin', 'partner'] || 
+             request.auth.token.email in emailDoc.data.to;
+    }
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || hasRole('admin') || hasRole('superuser'));
+      allow write: if hasRole('superuser');
+    }
+    
+    match /processedEmails/{emailId} {
+      allow read: if isAuthenticated() && canAccessEmail(resource);
+      allow write: if hasRole('superuser');
+    }
+    
+    match /todos/{todoId} {
+      allow read: if isAuthenticated() && (
+        resource.data.createdFor == request.auth.token.email ||
+        hasRole('partner') ||
+        hasRole('admin') ||
+        hasRole('superuser')
+      );
+      allow write: if isAuthenticated() && (
+        resource.data.createdFor == request.auth.token.email ||
+        hasRole('partner') ||
+        hasRole('admin') ||
+        hasRole('superuser')
+      );
+    }
+    
+    match /rules/{ruleId} {
+      allow read: if isAuthenticated() && (
+        hasRole('partner') ||
+        hasRole('admin') ||
+        hasRole('superuser')
+      );
+      allow write: if isAuthenticated() && (
+        hasRole('admin') ||
+        hasRole('superuser')
+      );
+    }
+  }
+}
